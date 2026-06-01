@@ -40,5 +40,6 @@ _*.py
 # === 设计文档（含架构细节/敏感经验） ===
 大纲/
 PHASE1_SNAPSHOT.md
-CHANGELOG*.md
+# CHANGELOG allowed (safe version)
 数据.md
+

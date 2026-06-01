@@ -1,4 +1,4 @@
-﻿"""SRC Report Generator 鈥?琛ュぉ/Platform D/Platform B multi-platform export.
+"""SRC Report Generator — 补天/HackerOne/TSRC multi-platform export.
 
 Generates submission-ready vulnerability reports with CWE classification,
 confidence scoring, PoC generation, and multi-platform formatting.
@@ -9,22 +9,76 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+
+BUTIAN_LOW_IMPACT_CWE = {
+    "CWE-200": "Information Exposure",
+    "CWE-532": "Sensitive Info in Logs",
+    "CWE-209": "Error Message Info Leak",
+    "CWE-798": "Hardcoded Credentials",
+    "CWE-204": "Observable Response Discrepancy",
+    "CWE-548": "Directory Listing",
+    "CWE-693": "Protection Mechanism Failure",
+}
+
+BUTIAN_SEVERITY_DOWNGRADE = {
+    "critical": "high",
+    "high": "medium",
+    "medium": "low",
+    "low": "info",
+    "info": "info",
+}
+
+
+def apply_butian_compliance(findings):
+    """Apply Butian rules: downgrade pure info-leak findings."""
+    adjusted = []
+    for f in findings:
+        cwe = f.get("cwe_id", "")
+        f = dict(f)
+        if cwe in BUTIAN_LOW_IMPACT_CWE:
+            old_sev = f.get("severity", "low")
+            new_sev = BUTIAN_SEVERITY_DOWNGRADE.get(old_sev, old_sev)
+            f["severity"] = new_sev
+            f["butian_risk"] = "low_impact"
+            f["butian_note"] = BUTIAN_LOW_IMPACT_CWE[cwe] + ": info leak, low impact per Butian rules"
+        else:
+            f["butian_risk"] = "actionable"
+        adjusted.append(f)
+    return adjusted
+
+
+def filter_butian_submittable(findings):
+    """Split findings into submittable vs needs-more-evidence."""
+    submittable = []
+    needs_evidence = []
+    for f in findings:
+        sev = f.get("severity", "info")
+        conf = f.get("confidence", 0)
+        risk = f.get("butian_risk", "actionable")
+        if risk == "low_impact":
+            needs_evidence.append(f)
+        elif sev in ("critical", "high", "medium") and conf >= 60:
+            submittable.append(f)
+        else:
+            needs_evidence.append(f)
+    return submittable, needs_evidence
+
 PLATFORM_TEMPLATES = {
-    "platform_a": {
-        "name": "Platform A",
-        "fields": ["婕忔礊鏍囬", "婕忔礊绫诲瀷(CWE)", "鍗卞绛夌骇", "婕忔礊URL/浣嶇疆", "婕忔礊鎻忚堪", "澶嶇幇姝ラ", "淇寤鸿", "缃俊搴?],
+    "butian": {
+        "name": "补天SRC",
+        "fields": ["漏洞标题", "漏洞类型(CWE)", "危害等级", "漏洞URL/位置", "漏洞描述", "复现步骤", "修复建议", "置信度"],
     },
-    "Platform D": {
-        "name": "Platform D",
+    "hackerone": {
+        "name": "HackerOne",
         "fields": ["Title", "CWE", "Severity", "Endpoint", "Description", "Steps to Reproduce", "Remediation", "Confidence"],
     },
-    "Platform B": {
-        "name": "Platform B",
-        "fields": ["婕忔礊鏍囬", "婕忔礊绫诲瀷", "鍗卞绛夌骇", "褰卞搷URL", "婕忔礊璇︽儏", "澶嶇幇姝ラ", "淇鏂规", "鑷瘎绛夌骇"],
+    "tsrc": {
+        "name": "腾讯TSRC",
+        "fields": ["漏洞标题", "漏洞类型", "危害等级", "影响URL", "漏洞详情", "复现步骤", "修复方案", "自评等级"],
     },
-    "Platform C": {
-        "name": "Platform C",
-        "fields": ["鏍囬", "绫诲瀷", "绛夌骇", "婕忔礊鍦板潃", "璇︾粏鎻忚堪", "PoC", "淇寤鸿", "鍙俊搴?],
+    "360src": {
+        "name": "360SRC",
+        "fields": ["标题", "类型", "等级", "漏洞地址", "详细描述", "PoC", "修复建议", "可信度"],
     },
 }
 
@@ -58,8 +112,8 @@ def generate_poc(hook):
     return templates.get(cwe, 'PoC\\n\\nVulnerable code:\\n' + code_block + '\\n\\nManual verification required.')
 
 
-def build_report(findings, platform='platform_a', repo_url=''):
-    tmpl = PLATFORM_TEMPLATES.get(platform, PLATFORM_TEMPLATES['platform_a'])
+def build_report(findings, platform='butian', repo_url=''):
+    tmpl = PLATFORM_TEMPLATES.get(platform, PLATFORM_TEMPLATES['butian'])
     lines = []
     lines.append('# VulnForge Security Audit Report')
     lines.append('')
@@ -117,7 +171,7 @@ def build_report(findings, platform='platform_a', repo_url=''):
     return '\\n'.join(lines)
 
 
-def export_report(findings, output_path, platform='platform_a', repo_url=''):
+def export_report(findings, output_path, platform='butian', repo_url=''):
     report = build_report(findings, platform, repo_url)
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(report)
@@ -152,10 +206,10 @@ def export_json(findings, output_path):
     return output_path
 
 
-def build_platform_a_report(findings: list[dict], domain: str, project_name: str = "", vulnforge_version: str = "v3.0") -> str:
-    """Generate platform_a-compliant vulnerability submission report.
+def build_butian_report(findings: list[dict], domain: str, project_name: str = "", vulnforge_version: str = "v3.0") -> str:
+    """Generate Butian-compliant vulnerability submission report.
     
-    platform_a requirements:
+    Butian requirements:
     - Title: [domain] + vuln name
     - Full reproduction steps, screenshots, PoC code
     - Category: Web vulnerability
@@ -170,24 +224,24 @@ def build_platform_a_report(findings: list[dict], domain: str, project_name: str
     unverified = [f for f in findings if f not in verified]
     
     lines = [
-        "# 琛ュぉ婕忔礊鎻愪氦鎶ュ憡",
+        "# 补天漏洞提交报告",
         "",
-        f"- **鎻愪氦鏃ユ湡**: {date_str}",
-        f"- **鍘傚晢/椤圭洰**: {project_name or domain}",
-        f"- **婕忔礊绫诲埆**: Web婕忔礊",
-        f"- **宸ュ叿鐗堟湰**: VulnForge {vulnforge_version}",
-        f"- **宸查獙璇佹紡娲?*: {len(verified)} 涓?,
-        f"- **寰呮墜鍔ㄩ獙璇?*: {len(unverified)} 涓?,
+        f"- **提交日期**: {date_str}",
+        f"- **厂商/项目**: {project_name or domain}",
+        f"- **漏洞类别**: Web漏洞",
+        f"- **工具版本**: VulnForge {vulnforge_version}",
+        f"- **已验证漏洞**: {len(verified)} 个",
+        f"- **待手动验证**: {len(unverified)} 个",
         "",
         "---",
         "",
-        "## 鎻愪氦鍓嶆鏌ユ竻鍗?,
+        "## 提交前检查清单",
         "",
-        "- [ ] 宸插垹闄ゆ墍鏈夋湰鍦版祴璇曡褰?,
-        "- [ ] 鏈繚瀛?浼犳挱浠讳綍娴嬭瘯鏁版嵁",
-        "- [ ] 婕忔礊璇︽儏鍚畬鏁村鐜版楠?,
-        "- [ ] PoC浠ｇ爜缁忚繃鎵嬪伐楠岃瘉",
-        "- [ ] 闄勪欢鍘嬬缉涓篫IP鏍煎紡",
+        "- [ ] 已删除所有本地测试记录",
+        "- [ ] 未保存/传播任何测试数据",
+        "- [ ] 漏洞详情含完整复现步骤",
+        "- [ ] PoC代码经过手工验证",
+        "- [ ] 附件压缩为ZIP格式",
         "",
         "---",
         "",
@@ -195,41 +249,41 @@ def build_platform_a_report(findings: list[dict], domain: str, project_name: str
     
     for i, f in enumerate(verified, 1):
         severity = f.get("severity", "low")
-        sev_cn = {"high": "楂樺嵄", "medium": "涓嵄", "low": "浣庡嵄", "critical": "涓ラ噸"}.get(severity, severity)
-        title = f.get("title", "鏈懡鍚嶆紡娲?)
+        sev_cn = {"high": "高危", "medium": "中危", "low": "低危", "critical": "严重"}.get(severity, severity)
+        title = f.get("title", "未命名漏洞")
         cwe = f.get("cwe_id", f.get("cwe", "?"))
         
-        lines.append(f"## 婕忔礊 {i}: [{domain}] {title}")
+        lines.append(f"## 漏洞 {i}: [{domain}] {title}")
         lines.append("")
-        lines.append("### 鍩虹淇℃伅")
+        lines.append("### 基础信息")
         lines.append("")
-        lines.append(f"| 椤圭洰 | 鍊?|")
+        lines.append(f"| 项目 | 值 |")
         lines.append(f"|------|------|")
-        lines.append(f"| 婕忔礊鏍囬 | [{domain}] {title} |")
-        lines.append(f"| 婕忔礊绫诲埆 | Web婕忔礊 |")
-        lines.append(f"| 涓ラ噸绋嬪害 | {sev_cn} |")
-        lines.append(f"| CWE缂栧彿 | {cwe} |")
-        lines.append(f"| 缃俊搴?| {f.get('confidence', '?')}% |")
-        lines.append(f"| 鐩爣URL | {f.get('url', domain)} |")
+        lines.append(f"| 漏洞标题 | [{domain}] {title} |")
+        lines.append(f"| 漏洞类别 | Web漏洞 |")
+        lines.append(f"| 严重程度 | {sev_cn} |")
+        lines.append(f"| CWE编号 | {cwe} |")
+        lines.append(f"| 置信度 | {f.get('confidence', '?')}% |")
+        lines.append(f"| 目标URL | {f.get('url', domain)} |")
         lines.append("")
         
-        lines.append("### 婕忔礊鎻忚堪")
+        lines.append("### 漏洞描述")
         lines.append("")
-        lines.append(f.get("description", "璇﹁涓嬫柟澶嶇幇姝ラ"))
+        lines.append(f.get("description", "详见下方复现步骤"))
         lines.append("")
         
-        lines.append("### 澶嶇幇姝ラ")
+        lines.append("### 复现步骤")
         lines.append("")
         if f.get("reproduction_steps"):
             for step in f["reproduction_steps"]:
                 lines.append(f"1. {step}")
         else:
-            lines.append(f"1. 璁块棶 {f.get('url', domain)}")
-            lines.append(f"2. 鏌ョ湅鍝嶅簲/椤甸潰婧愮爜")
-            lines.append(f"3. 鍙戠幇涓婅堪婕忔礊")
+            lines.append(f"1. 访问 {f.get('url', domain)}")
+            lines.append(f"2. 查看响应/页面源码")
+            lines.append(f"3. 发现上述漏洞")
         lines.append("")
         
-        lines.append("### PoC浠ｇ爜")
+        lines.append("### PoC代码")
         lines.append("")
         poc = f.get("poc", "")
         if poc:
@@ -238,12 +292,12 @@ def build_platform_a_report(findings: list[dict], domain: str, project_name: str
             lines.append("```")
         else:
             lines.append("```curl")
-            lines.append(f"# 璁块棶 {f.get('url', '')}")
+            lines.append(f"# 访问 {f.get('url', '')}")
             lines.append(f"curl -i {f.get('url', domain)}")
             lines.append("```")
         lines.append("")
         
-        lines.append("### 婕忔礊璇佹嵁")
+        lines.append("### 漏洞证据")
         lines.append("")
         evidence = f.get("evidence", "")
         if evidence:
@@ -252,16 +306,16 @@ def build_platform_a_report(findings: list[dict], domain: str, project_name: str
             lines.append("```")
         lines.append("")
         
-        lines.append("### 淇寤鸿")
+        lines.append("### 修复建议")
         lines.append("")
-        lines.append(f.get("remediation", "璇峰弬鑰冨搴擟WE缂栧彿鍙殑鏍囧噯淇鏂规"))
+        lines.append(f.get("remediation", "请参考对应CWE编号召的标准修复方案"))
         lines.append("")
         
         lines.append("---")
         lines.append("")
     
     if unverified:
-        lines.append("## 寰呮墜鍔ㄩ獙璇?)
+        lines.append("## 待手动验证")
         lines.append("")
         for i, f in enumerate(unverified, 1):
             lines.append(f"{i}. {f.get('title', '?')} (confidence: {f.get('confidence', '?')}%)")
