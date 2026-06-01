@@ -1,0 +1,24 @@
+# VulnForge - Phase 1 Core Dependencies
+# AST parsing
+tree-sitter>=0.23.0
+
+# Database (stdlib sqlite3, but we may want aiosqlite later)
+# aiosqlite>=0.20.0
+
+# Local AI interaction
+ollama>=0.4.0
+
+# Code analysis utilities
+pygments>=2.18.0
+
+# Testing
+pytest>=8.0.0
+
+# Desktop UI (Phase 2+)
+PySide6>=6.8.0
+
+# HTTP client (lightweight Ollama calls)
+requests>=2.32.0
+
+# Context engineering
+# sentence-transformers>=3.0.0  # for embedding-based similarity (Phase 2+)

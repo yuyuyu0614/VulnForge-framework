@@ -1,0 +1,44 @@
+﻿# VulnForge — AI驱动的漏洞挖掘框架
+# 只推框架源码，不推扫描数据/报告/数据库
+
+# === 扫描数据（含第三方厂商代码） ===
+scans/
+
+# === 漏洞报告（含厂商漏洞信息） ===
+reports/*.md
+reports/*.json
+
+# === 数据库文件 ===
+*.db
+*.db-shm
+*.db-wal
+
+# === Benchmark漏洞样本 ===
+benchmarks/
+
+# === Python缓存 ===
+__pycache__/
+*.pyc
+
+# === IDE ===
+.idea/
+.vscode/
+
+# === 环境配置（含本地密钥/token） ===
+.env
+.env.*
+wa_config.json
+.claude/
+
+# === 构建产物 ===
+dist/
+*.exe
+
+# === 临时/测试脚本 ===
+_*.py
+
+# === 设计文档（含架构细节/敏感经验） ===
+大纲/
+PHASE1_SNAPSHOT.md
+CHANGELOG*.md
+数据.md
